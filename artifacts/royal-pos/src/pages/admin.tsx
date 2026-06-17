@@ -1,11 +1,11 @@
 import { useState, useRef } from "react";
-import { useShopInfo, useCategories, useMenuItems, useSecuritySettings } from "@/hooks/use-data";
+import { useShopInfo, useCategories, useMenuItems, useSecuritySettings, useRawMaterials } from "@/hooks/use-data";
 import { StorageAPI } from "@/lib/storage";
-import { Plus, Trash2, Edit2, Check, X, Store, Tag, Pizza, Upload, Image, Shield, Key, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, X, Store, Tag, Pizza, Upload, Image, Shield, Key, Eye, EyeOff, Package } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<"shop" | "categories" | "items" | "security">("shop");
+  const [activeTab, setActiveTab] = useState<"shop" | "categories" | "items" | "materials" | "security">("shop");
 
   return (
     <div className="flex-1 bg-gray-50 overflow-y-auto">
@@ -18,6 +18,7 @@ export default function Admin() {
           <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm gap-1 overflow-x-auto scrollbar-hide">
             <TabBtn active={activeTab === "shop"} onClick={() => setActiveTab("shop")} icon={<Store className="w-4 h-4" />} label="Shop" />
             <TabBtn active={activeTab === "categories"} onClick={() => setActiveTab("categories")} icon={<Tag className="w-4 h-4" />} label="Categories" />
+            <TabBtn active={activeTab === "materials"} onClick={() => setActiveTab("materials")} icon={<Package className="w-4 h-4" />} label="Materials" />
             <TabBtn active={activeTab === "items"} onClick={() => setActiveTab("items")} icon={<Pizza className="w-4 h-4" />} label="Menu" />
             <TabBtn active={activeTab === "security"} onClick={() => setActiveTab("security")} icon={<Shield className="w-4 h-4" />} label="Security" />
           </div>
@@ -26,6 +27,7 @@ export default function Admin() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 md:p-6">
           {activeTab === "shop" && <ShopInfoTab />}
           {activeTab === "categories" && <CategoriesTab />}
+          {activeTab === "materials" && <MaterialsTab />}
           {activeTab === "items" && <MenuItemsTab />}
           {activeTab === "security" && <SecurityTab />}
         </div>
@@ -210,18 +212,19 @@ function CategoriesTab() {
 function MenuItemsTab() {
   const { data: items, addItem, updateItem, deleteItem } = useMenuItems();
   const { data: categories } = useCategories();
+  const { data: rawMaterials } = useRawMaterials();
   const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", price: "", categoryId: "", image: "🍔", trackStock: false, stock: 0 });
+  const [form, setForm] = useState({ name: "", price: "", categoryId: "", image: "🍔", trackStock: false, stock: 0, recipe: [] as { materialId: string; quantity: number }[] });
   const [filterCat, setFilterCat] = useState("All");
 
   const startEdit = (item: any) => {
     setIsEditing(item.id);
-    setForm({ name: item.name, price: item.price.toString(), categoryId: item.categoryId, image: item.image, trackStock: item.trackStock || false, stock: item.stock || 0 });
+    setForm({ name: item.name, price: item.price.toString(), categoryId: item.categoryId, image: item.image, trackStock: item.trackStock || false, stock: item.stock || 0, recipe: item.recipe || [] });
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { name: form.name.trim(), price: parseFloat(form.price), categoryId: form.categoryId, image: form.image, trackStock: form.trackStock, stock: form.stock };
+    const payload = { name: form.name.trim(), price: parseFloat(form.price), categoryId: form.categoryId, image: form.image, trackStock: form.trackStock, stock: form.stock, recipe: form.recipe.filter(r => r.materialId && r.quantity > 0) };
     if (isEditing === "new") addItem(payload);
     else if (isEditing) updateItem(isEditing, payload);
     setIsEditing(null);
@@ -274,6 +277,51 @@ function MenuItemsTab() {
           )}
         </div>
 
+        <div className="pt-4 border-t border-gray-100">
+          <Field label="Recipe / Packaging (Optional)">
+            <p className="text-xs text-gray-500 mb-2">Select raw materials to automatically deduct when this item is sold.</p>
+            {form.recipe.map((r, i) => (
+              <div key={i} className="flex gap-2 mb-2">
+                <select 
+                  className={inputCls} 
+                  value={r.materialId}
+                  onChange={(e) => {
+                    const newRecipe = [...form.recipe];
+                    newRecipe[i].materialId = e.target.value;
+                    setForm({ ...form, recipe: newRecipe });
+                  }}
+                >
+                  <option value="" disabled>Select Material...</option>
+                  {rawMaterials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                <input 
+                  type="number" 
+                  min="0" 
+                  step="0.01"
+                  className={inputCls} 
+                  style={{ width: '90px' }}
+                  value={r.quantity}
+                  onChange={(e) => {
+                    const newRecipe = [...form.recipe];
+                    newRecipe[i].quantity = parseFloat(e.target.value) || 0;
+                    setForm({ ...form, recipe: newRecipe });
+                  }}
+                />
+                <button type="button" onClick={() => setForm({ ...form, recipe: form.recipe.filter((_, idx) => idx !== i) })} className="p-2 text-red-500 hover:bg-red-50 rounded-lg shrink-0">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <button 
+              type="button" 
+              onClick={() => setForm({ ...form, recipe: [...form.recipe, { materialId: "", quantity: 1 }] })}
+              className="text-sm font-bold text-yellow-600 hover:text-yellow-700 flex items-center gap-1 mt-2"
+            >
+              <Plus className="w-4 h-4" /> Add Material
+            </button>
+          </Field>
+        </div>
+
         <div className="flex gap-3 pt-2">
           <button type="submit" className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all shadow-sm text-sm">Save Item</button>
           <button type="button" onClick={() => setIsEditing(null)} className="py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-sm">Cancel</button>
@@ -290,7 +338,7 @@ function MenuItemsTab() {
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name} ({items.filter((i) => i.categoryId === c.id).length})</option>)}
         </select>
         <button
-          onClick={() => { setIsEditing("new"); setForm({ name: "", price: "", categoryId: categories[0]?.id || "", image: "🍔", trackStock: false, stock: 0 }); }}
+          onClick={() => { setIsEditing("new"); setForm({ name: "", price: "", categoryId: categories[0]?.id || "", image: "🍔", trackStock: false, stock: 0, recipe: [] }); }}
           className="flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all text-sm shadow-sm"
         >
           <Plus className="w-4 h-4" /> Add New Item
@@ -427,6 +475,92 @@ function SecurityTab() {
             <p>Change your PINs regularly to keep your sales data safe. Avoid using simple PINs like 1234 or 1111 for Manager access.</p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MaterialsTab() {
+  const { data: materials, addMaterial, updateMaterial, deleteMaterial } = useRawMaterials();
+  const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", unit: "pcs", stock: 0 });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isEditing === "new") addMaterial({ name: form.name.trim(), unit: form.unit, stock: form.stock });
+    else if (isEditing) updateMaterial(isEditing, { name: form.name.trim(), unit: form.unit, stock: form.stock });
+    setIsEditing(null);
+  };
+
+  if (isEditing) {
+    return (
+      <form onSubmit={handleSave} className="max-w-lg space-y-4">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-black text-lg text-gray-900">{isEditing === "new" ? "Add Raw Material" : "Edit Material"}</h3>
+          <button type="button" onClick={() => setIsEditing(null)} className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors text-gray-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <Field label="Material Name">
+          <input required type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Medium Pizza Box" className={inputCls} />
+        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Unit">
+            <select required value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className={inputCls}>
+              <option value="pcs">Pieces (pcs)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="g">Grams (g)</option>
+              <option value="L">Liters (L)</option>
+              <option value="ml">Milliliters (ml)</option>
+            </select>
+          </Field>
+          <Field label="Initial Stock">
+            <input required type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: parseInt(e.target.value) || 0 })} className={inputCls} />
+          </Field>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button type="submit" className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all shadow-sm text-sm">Save Material</button>
+          <button type="button" onClick={() => setIsEditing(null)} className="py-3 px-6 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 active:scale-95 transition-all text-sm">Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-gray-500 font-medium">Define raw materials and packaging items (e.g. Pizza Boxes, Wrap Bases) to track stock correctly based on recipes.</p>
+        <button
+          onClick={() => { setIsEditing("new"); setForm({ name: "", unit: "pcs", stock: 0 }); }}
+          className="flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all text-sm shadow-sm"
+        >
+          <Plus className="w-4 h-4" /> Add Material
+        </button>
+      </div>
+      <div className="space-y-3">
+        {materials.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p>No raw materials found.</p>
+          </div>
+        ) : (
+          materials.map((m) => (
+            <div key={m.id} className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-xl group hover:border-yellow-200 transition-colors">
+              <div>
+                <p className="font-bold text-gray-900">{m.name}</p>
+                <p className="text-sm text-gray-500">Stock: <span className="font-bold">{m.stock} {m.unit}</span></p>
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => { setIsEditing(m.id); setForm({ name: m.name, unit: m.unit || "pcs", stock: m.stock || 0 }); }} className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg">
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => { if (confirm(`Delete ${m.name}?`)) deleteMaterial(m.id); }} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

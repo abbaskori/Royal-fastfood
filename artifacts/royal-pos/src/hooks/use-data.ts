@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StorageAPI, type ShopInfo, type Category, type MenuItem, type Order, type Customer } from '@/lib/storage';
+import { StorageAPI, type ShopInfo, type Category, type MenuItem, type Order, type Customer, type RawMaterial } from '@/lib/storage';
 
 function useStorageData<T>(getter: () => T) {
   const [data, setData] = useState<T>(getter());
@@ -76,3 +76,14 @@ export function useSecuritySettings() {
     update: StorageAPI.setSecuritySettings 
   };
 }
+
+export function useRawMaterials() {
+  const materials = useStorageData(StorageAPI.getRawMaterials);
+  return {
+    data: materials,
+    addMaterial: StorageAPI.addRawMaterial,
+    updateMaterial: StorageAPI.updateRawMaterial,
+    deleteMaterial: StorageAPI.deleteRawMaterial
+  };
+}
+

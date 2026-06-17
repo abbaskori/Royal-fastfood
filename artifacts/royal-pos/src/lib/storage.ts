@@ -11,6 +11,7 @@ const KEYS = {
   CUSTOMERS: "royal_customers",
   BILL_COUNTER: "royal_bill_counter",
   SECURITY: "royal_security_settings",
+  RAW_MATERIALS: "royal_raw_materials",
 };
 
 export interface SecuritySettings {
@@ -48,6 +49,14 @@ export interface MenuItem {
   createdAt: string;
   trackStock?: boolean;
   stock?: number;
+  recipe?: { materialId: string; quantity: number }[];
+}
+
+export interface RawMaterial {
+  id: string;
+  name: string;
+  unit: string;
+  stock: number;
 }
 
 export interface OrderItem {
@@ -166,6 +175,28 @@ export const StorageAPI = {
     set(KEYS.MENU_ITEMS, items);
   },
 
+  getRawMaterials: () => get<RawMaterial[]>(KEYS.RAW_MATERIALS, []),
+  setRawMaterials: (materials: RawMaterial[]) => {
+    set(KEYS.RAW_MATERIALS, materials);
+  },
+  addRawMaterial: (material: Omit<RawMaterial, 'id'>) => {
+    const materials = StorageAPI.getRawMaterials();
+    materials.push({ ...material, id: uuidv4() });
+    set(KEYS.RAW_MATERIALS, materials);
+  },
+  updateRawMaterial: (id: string, updates: Partial<RawMaterial>) => {
+    const materials = StorageAPI.getRawMaterials();
+    const index = materials.findIndex(m => m.id === id);
+    if (index !== -1) {
+      materials[index] = { ...materials[index], ...updates };
+      set(KEYS.RAW_MATERIALS, materials);
+    }
+  },
+  deleteRawMaterial: (id: string) => {
+    const materials = StorageAPI.getRawMaterials();
+    set(KEYS.RAW_MATERIALS, materials.filter(m => m.id !== id));
+  },
+
   getOrders: () => get<Order[]>(KEYS.ORDERS, []),
   addOrder: (orderWithoutIdAndBill: Omit<Order, 'id' | 'billNumber'>) => {
     const orders = StorageAPI.getOrders();
@@ -182,12 +213,24 @@ export const StorageAPI = {
     set(KEYS.ORDERS, orders);
     localStorage.setItem(KEYS.BILL_COUNTER, (currentBill + 1).toString());
 
-    // Deduct stock for tracked items
+    // Deduct stock for tracked items and raw materials
     newOrder.items.forEach(item => {
       const items = StorageAPI.getMenuItems();
       const mi = items.find(i => i.id === item.id);
-      if (mi && mi.trackStock) {
-        mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+      if (mi) {
+        if (mi.trackStock) {
+          mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+        }
+        if (mi.recipe && mi.recipe.length > 0) {
+          const materials = StorageAPI.getRawMaterials();
+          mi.recipe.forEach(req => {
+            const mat = materials.find(m => m.id === req.materialId);
+            if (mat) {
+              mat.stock = Math.max(0, (mat.stock || 0) - (req.quantity * item.quantity));
+            }
+          });
+          set(KEYS.RAW_MATERIALS, materials);
+        }
         set(KEYS.MENU_ITEMS, items);
       }
     });
@@ -239,8 +282,20 @@ export const StorageAPI = {
     orders[index].items.forEach(item => {
       const items = StorageAPI.getMenuItems();
       const mi = items.find(i => i.id === item.id);
-      if (mi && mi.trackStock) {
-        mi.stock = (mi.stock || 0) + item.quantity;
+      if (mi) {
+        if (mi.trackStock) {
+          mi.stock = (mi.stock || 0) + item.quantity;
+        }
+        if (mi.recipe && mi.recipe.length > 0) {
+          const materials = StorageAPI.getRawMaterials();
+          mi.recipe.forEach(req => {
+            const mat = materials.find(m => m.id === req.materialId);
+            if (mat) {
+              mat.stock = (mat.stock || 0) + (req.quantity * item.quantity);
+            }
+          });
+          set(KEYS.RAW_MATERIALS, materials);
+        }
         set(KEYS.MENU_ITEMS, items);
       }
     });
@@ -252,8 +307,20 @@ export const StorageAPI = {
     updatedOrder.items.forEach(item => {
       const items = StorageAPI.getMenuItems();
       const mi = items.find(i => i.id === item.id);
-      if (mi && mi.trackStock) {
-        mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+      if (mi) {
+        if (mi.trackStock) {
+          mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+        }
+        if (mi.recipe && mi.recipe.length > 0) {
+          const materials = StorageAPI.getRawMaterials();
+          mi.recipe.forEach(req => {
+            const mat = materials.find(m => m.id === req.materialId);
+            if (mat) {
+              mat.stock = Math.max(0, (mat.stock || 0) - (req.quantity * item.quantity));
+            }
+          });
+          set(KEYS.RAW_MATERIALS, materials);
+        }
         set(KEYS.MENU_ITEMS, items);
       }
     });
@@ -269,8 +336,20 @@ export const StorageAPI = {
       orderToDelete.items.forEach(item => {
         const items = StorageAPI.getMenuItems();
         const mi = items.find(i => i.id === item.id);
-        if (mi && mi.trackStock) {
-          mi.stock = (mi.stock || 0) + item.quantity;
+        if (mi) {
+          if (mi.trackStock) {
+            mi.stock = (mi.stock || 0) + item.quantity;
+          }
+          if (mi.recipe && mi.recipe.length > 0) {
+            const materials = StorageAPI.getRawMaterials();
+            mi.recipe.forEach(req => {
+              const mat = materials.find(m => m.id === req.materialId);
+              if (mat) {
+                mat.stock = (mat.stock || 0) + (req.quantity * item.quantity);
+              }
+            });
+            set(KEYS.RAW_MATERIALS, materials);
+          }
           set(KEYS.MENU_ITEMS, items);
         }
       });

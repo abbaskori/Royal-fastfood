@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { ShoppingCart, Plus, Minus, Trash2, ChevronDown, User, Phone, X, ArrowLeft, PlusCircle, Search } from "lucide-react";
-import { useCategories, useMenuItems, useOrders, useCustomers, useShopInfo } from "@/hooks/use-data";
+import { useCategories, useMenuItems, useOrders, useCustomers, useShopInfo, useRawMaterials } from "@/hooks/use-data";
 import { formatCurrency, getEmojiSvgUri, cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -74,6 +74,7 @@ function loadTabs(): { tabs: BillTab[]; activeTabId: string } {
 export default function POS() {
   const { data: categories } = useCategories();
   const { data: menuItems } = useMenuItems();
+  const { data: rawMaterials } = useRawMaterials();
   const { createOrder, updateOrder } = useOrders();
   const { data: customers } = useCustomers();
   const { data: shop } = useShopInfo();
@@ -137,11 +138,36 @@ export default function POS() {
 
   // ── Cart operations (on active tab) ────────────────────────────────────────
 
-  const addToCart = (item: any) => {
+  const getMaxAvailability = (item: any) => {
+    if (!item.trackStock && (!item.recipe || item.recipe.length === 0)) return Infinity;
+    
+    let max = Infinity;
     if (item.trackStock) {
+      max = item.stock || 0;
+    }
+    
+    if (item.recipe && item.recipe.length > 0) {
+      for (const req of item.recipe) {
+        if (!req.materialId || req.quantity <= 0) continue;
+        const mat = rawMaterials.find(m => m.id === req.materialId);
+        if (!mat) {
+          max = 0;
+          break;
+        }
+        const possible = Math.floor((mat.stock || 0) / req.quantity);
+        if (possible < max) max = possible;
+      }
+    }
+    
+    return max;
+  };
+
+  const addToCart = (item: any) => {
+    const maxAvailable = getMaxAvailability(item);
+    if (maxAvailable !== Infinity) {
       const existing = activeTab.cart.find((i) => i.id === item.id);
       const currentQty = existing ? existing.qty : 0;
-      if (currentQty >= (item.stock || 0)) {
+      if (currentQty >= maxAvailable) {
         return; // Prevent exceeding stock
       }
     }
@@ -162,8 +188,11 @@ export default function POS() {
         if (i.uid === uid) {
           const itemDef = menuItems.find(mi => mi.id === i.id);
           let newQty = Math.max(0, i.qty + delta);
-          if (itemDef?.trackStock && newQty > (itemDef.stock || 0)) {
-            newQty = itemDef.stock || 0;
+          if (itemDef) {
+            const maxAvailable = getMaxAvailability(itemDef);
+            if (maxAvailable !== Infinity && newQty > maxAvailable) {
+              newQty = maxAvailable;
+            }
           }
           return { ...i, qty: newQty };
         }
@@ -386,10 +415,16 @@ export default function POS() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {filteredItems.map((item) => (
+                  {filteredItems.map((item) => {
+                    const maxAvailable = getMaxAvailability(item);
+                    const isTracked = maxAvailable !== Infinity;
+                    const isOut = isTracked && maxAvailable === 0;
+                    const isLow = isTracked && maxAvailable <= 5;
+                    
+                    return (
                     <button
                       key={item.id}
-                      disabled={item.trackStock && (item.stock || 0) === 0}
+                      disabled={isOut}
                       onClick={() => addToCart(item)}
                       className="group flex flex-col bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-500 transition-all active:scale-95 text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -401,15 +436,16 @@ export default function POS() {
                         <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight line-clamp-2 mb-1">{item.name}</p>
                         <div className="flex items-center justify-between mt-auto">
                           <p className="text-green-600 dark:text-green-400 font-bold text-sm">{formatCurrency(item.price)}</p>
-                          {item.trackStock && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${(item.stock || 0) === 0 ? 'bg-red-100 text-red-600' : (item.stock || 0) <= 5 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
-                              {(item.stock || 0) === 0 ? 'Out of Stock' : `${item.stock} left`}
+                          {isTracked && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOut ? 'bg-red-100 text-red-600' : isLow ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                              {isOut ? 'Out of Stock' : `${maxAvailable} left`}
                             </span>
                           )}
                         </div>
                       </div>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
