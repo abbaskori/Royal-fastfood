@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RoyalPOS</string>
+    <string name="title_activity_main">RoyalPOS</string>
+    <string name="package_name">com.royalfastfood.pos</string>
+    <string name="custom_url_scheme">com.royalfastfood.pos</string>
+</resources>

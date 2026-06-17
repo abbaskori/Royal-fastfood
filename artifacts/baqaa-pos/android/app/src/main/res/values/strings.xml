@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">BaqaaPOS</string>
-    <string name="title_activity_main">BaqaaPOS</string>
-    <string name="package_name">com.baqaafood.pos</string>
-    <string name="custom_url_scheme">com.baqaafood.pos</string>
-</resources>
