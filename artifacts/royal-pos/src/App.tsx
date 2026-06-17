@@ -12,6 +12,7 @@ import Admin from "@/pages/admin";
 import Analytics from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
+import Inventory from "@/pages/inventory";
 
 const queryClient = new QueryClient();
 
@@ -20,7 +21,7 @@ function Router({ role }: { role: 'admin' | 'staff' | 'manager' }) {
 
   // Role-based access control
   useEffect(() => {
-    if (role === 'staff' && (location === '/admin' || location === '/analytics')) {
+    if (role === 'staff' && (location === '/admin' || location === '/analytics' || location === '/inventory')) {
       setLocation('/');
     }
     if (role === 'manager' && (location === '/' || location === '/admin')) {
@@ -33,7 +34,10 @@ function Router({ role }: { role: 'admin' | 'staff' | 'manager' }) {
       <Switch>
         {role !== 'manager' && <Route path="/" component={POS} />}
         {(role === 'admin' || role === 'manager') && (
-          <Route path="/analytics" component={Analytics} />
+          <>
+            <Route path="/analytics" component={Analytics} />
+            <Route path="/inventory" component={Inventory} />
+          </>
         )}
         {role === 'admin' && (
           <Route path="/admin" component={Admin} />

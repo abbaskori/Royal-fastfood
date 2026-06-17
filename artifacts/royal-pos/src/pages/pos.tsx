@@ -138,6 +138,14 @@ export default function POS() {
   // ── Cart operations (on active tab) ────────────────────────────────────────
 
   const addToCart = (item: any) => {
+    if (item.trackStock) {
+      const existing = activeTab.cart.find((i) => i.id === item.id);
+      const currentQty = existing ? existing.qty : 0;
+      if (currentQty >= (item.stock || 0)) {
+        return; // Prevent exceeding stock
+      }
+    }
+
     updateTab({
       cart: (() => {
         const existing = activeTab.cart.find((i) => i.id === item.id);
@@ -149,7 +157,19 @@ export default function POS() {
   };
 
   const updateQty = (uid: string, delta: number) => {
-    updateTab({ cart: activeTab.cart.map((i) => i.uid === uid ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter((i) => i.qty > 0) });
+    updateTab({ 
+      cart: activeTab.cart.map((i) => {
+        if (i.uid === uid) {
+          const itemDef = menuItems.find(mi => mi.id === i.id);
+          let newQty = Math.max(0, i.qty + delta);
+          if (itemDef?.trackStock && newQty > (itemDef.stock || 0)) {
+            newQty = itemDef.stock || 0;
+          }
+          return { ...i, qty: newQty };
+        }
+        return i;
+      }).filter((i) => i.qty > 0) 
+    });
   };
 
   const removeFromCart = (uid: string) => updateTab({ cart: activeTab.cart.filter((i) => i.uid !== uid) });
@@ -369,8 +389,9 @@ export default function POS() {
                   {filteredItems.map((item) => (
                     <button
                       key={item.id}
+                      disabled={item.trackStock && (item.stock || 0) === 0}
                       onClick={() => addToCart(item)}
-                      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-500 transition-all active:scale-95 flex flex-col text-left w-full"
+                      className="group flex flex-col bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-500 transition-all active:scale-95 text-left w-full disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="bg-yellow-400 dark:bg-yellow-500 flex items-center justify-center h-24 sm:h-28 w-full">
                         <img src={getEmojiSvgUri(item.image, "FB923C")} alt={item.name}
@@ -378,7 +399,14 @@ export default function POS() {
                       </div>
                       <div className="p-2 flex flex-col flex-1">
                         <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight line-clamp-2 mb-1">{item.name}</p>
-                        <p className="text-green-600 dark:text-green-400 font-bold text-sm">{formatCurrency(item.price)}</p>
+                        <div className="flex items-center justify-between mt-auto">
+                          <p className="text-green-600 dark:text-green-400 font-bold text-sm">{formatCurrency(item.price)}</p>
+                          {item.trackStock && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${(item.stock || 0) === 0 ? 'bg-red-100 text-red-600' : (item.stock || 0) <= 5 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                              {(item.stock || 0) === 0 ? 'Out of Stock' : `${item.stock} left`}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </button>
                   ))}

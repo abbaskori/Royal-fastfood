@@ -211,17 +211,17 @@ function MenuItemsTab() {
   const { data: items, addItem, updateItem, deleteItem } = useMenuItems();
   const { data: categories } = useCategories();
   const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", price: "", categoryId: "", image: "🍔" });
+  const [form, setForm] = useState({ name: "", price: "", categoryId: "", image: "🍔", trackStock: false, stock: 0 });
   const [filterCat, setFilterCat] = useState("All");
 
   const startEdit = (item: any) => {
     setIsEditing(item.id);
-    setForm({ name: item.name, price: item.price.toString(), categoryId: item.categoryId, image: item.image });
+    setForm({ name: item.name, price: item.price.toString(), categoryId: item.categoryId, image: item.image, trackStock: item.trackStock || false, stock: item.stock || 0 });
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = { name: form.name.trim(), price: parseFloat(form.price), categoryId: form.categoryId, image: form.image };
+    const payload = { name: form.name.trim(), price: parseFloat(form.price), categoryId: form.categoryId, image: form.image, trackStock: form.trackStock, stock: form.stock };
     if (isEditing === "new") addItem(payload);
     else if (isEditing) updateItem(isEditing, payload);
     setIsEditing(null);
@@ -259,6 +259,20 @@ function MenuItemsTab() {
             <input type="text" maxLength={2} value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} placeholder="🍔" className={`${inputCls} flex-1 text-center text-2xl`} />
           </div>
         </Field>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Track Stock?">
+            <div className="flex items-center h-[42px] gap-2">
+              <input type="checkbox" checked={form.trackStock} onChange={(e) => setForm({ ...form, trackStock: e.target.checked })} className="w-5 h-5 text-yellow-500 rounded focus:ring-yellow-400" />
+              <span className="text-sm font-medium text-gray-700">Enable Tracking</span>
+            </div>
+          </Field>
+          {form.trackStock && (
+            <Field label="Current Stock">
+              <input required type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: parseInt(e.target.value) || 0 })} className={inputCls} />
+            </Field>
+          )}
+        </div>
 
         <div className="flex gap-3 pt-2">
           <button type="submit" className="flex-1 py-3 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all shadow-sm text-sm">Save Item</button>
@@ -276,7 +290,7 @@ function MenuItemsTab() {
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name} ({items.filter((i) => i.categoryId === c.id).length})</option>)}
         </select>
         <button
-          onClick={() => { setIsEditing("new"); setForm({ name: "", price: "", categoryId: categories[0]?.id || "", image: "🍔" }); }}
+          onClick={() => { setIsEditing("new"); setForm({ name: "", price: "", categoryId: categories[0]?.id || "", image: "🍔", trackStock: false, stock: 0 }); }}
           className="flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-xl font-bold hover:bg-yellow-600 active:scale-95 transition-all text-sm shadow-sm"
         >
           <Plus className="w-4 h-4" /> Add New Item
@@ -289,7 +303,14 @@ function MenuItemsTab() {
             <div className="w-12 h-12 shrink-0 rounded-lg bg-yellow-100 flex items-center justify-center text-2xl">{item.image}</div>
             <div className="flex-1 min-w-0">
               <p className="font-bold text-gray-800 text-sm truncate">{item.name}</p>
-              <p className="text-green-600 font-bold text-sm">{formatCurrency(item.price)}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-green-600 font-bold text-sm">{formatCurrency(item.price)}</p>
+                {item.trackStock && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${item.stock! <= 5 ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
+                    Stock: {item.stock}
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-400 truncate">{categories.find((c) => c.id === item.categoryId)?.name || "—"}</p>
             </div>
             <div className="flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">

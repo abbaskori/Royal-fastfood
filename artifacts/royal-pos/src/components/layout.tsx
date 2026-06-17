@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useRoute, useLocation } from "wouter";
-import { Store, BarChart3, Settings, LogOut, Sun, Moon } from "lucide-react";
+import { Store, BarChart3, Settings, LogOut, Sun, Moon, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShopInfo } from "@/hooks/use-data";
 
@@ -55,7 +55,10 @@ export function TopNav({ role }: { role: 'admin' | 'staff' | 'manager' }) {
             <NavLink href="/admin" icon={<Settings className="w-4 h-4" />} label="Admin" />
           )}
           {(role === 'admin' || role === 'manager') && (
-            <NavLink href="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" />
+            <>
+              <NavLink href="/inventory" icon={<Package className="w-4 h-4" />} label="Inventory" />
+              <NavLink href="/analytics" icon={<BarChart3 className="w-4 h-4" />} label="Analytics" />
+            </>
           )}
           {role !== 'manager' && (
             <NavLink href="/" exact icon={<Store className="w-4 h-4" />} label="POS" />

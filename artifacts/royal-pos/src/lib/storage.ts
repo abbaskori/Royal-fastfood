@@ -46,6 +46,8 @@ export interface MenuItem {
   categoryId: string;
   image: string; // Emoji
   createdAt: string;
+  trackStock?: boolean;
+  stock?: number;
 }
 
 export interface OrderItem {
@@ -180,6 +182,16 @@ export const StorageAPI = {
     set(KEYS.ORDERS, orders);
     localStorage.setItem(KEYS.BILL_COUNTER, (currentBill + 1).toString());
 
+    // Deduct stock for tracked items
+    newOrder.items.forEach(item => {
+      const items = StorageAPI.getMenuItems();
+      const mi = items.find(i => i.id === item.id);
+      if (mi && mi.trackStock) {
+        mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+        set(KEYS.MENU_ITEMS, items);
+      }
+    });
+
 
 
     // Update customer
@@ -223,16 +235,46 @@ export const StorageAPI = {
       id,
     };
 
+    // Revert old stock
+    orders[index].items.forEach(item => {
+      const items = StorageAPI.getMenuItems();
+      const mi = items.find(i => i.id === item.id);
+      if (mi && mi.trackStock) {
+        mi.stock = (mi.stock || 0) + item.quantity;
+        set(KEYS.MENU_ITEMS, items);
+      }
+    });
+
     orders[index] = updatedOrder;
     set(KEYS.ORDERS, orders);
 
-
+    // Apply new stock
+    updatedOrder.items.forEach(item => {
+      const items = StorageAPI.getMenuItems();
+      const mi = items.find(i => i.id === item.id);
+      if (mi && mi.trackStock) {
+        mi.stock = Math.max(0, (mi.stock || 0) - item.quantity);
+        set(KEYS.MENU_ITEMS, items);
+      }
+    });
 
     return updatedOrder;
   },
 
   deleteOrder: async (id: string) => {
     const orders = StorageAPI.getOrders();
+    const orderToDelete = orders.find(o => o.id === id);
+    if (orderToDelete) {
+      // Revert stock
+      orderToDelete.items.forEach(item => {
+        const items = StorageAPI.getMenuItems();
+        const mi = items.find(i => i.id === item.id);
+        if (mi && mi.trackStock) {
+          mi.stock = (mi.stock || 0) + item.quantity;
+          set(KEYS.MENU_ITEMS, items);
+        }
+      });
+    }
     const filtered = orders.filter(o => o.id !== id);
     set(KEYS.ORDERS, filtered);
   },
