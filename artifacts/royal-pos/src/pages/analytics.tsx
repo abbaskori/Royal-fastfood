@@ -84,6 +84,9 @@ export default function Analytics() {
 
     // Category breakdown
     const catMap: Record<string, number> = {};
+    // Initialize all known categories to 0
+    categories.forEach(c => { catMap[c.name] = 0; });
+    
     orders.forEach(o => {
       o.items.forEach(i => {
         // Find category using menuItems
@@ -95,9 +98,9 @@ export default function Analytics() {
     });
     
     // Category Pie Data
-    const categoryColors = ['#f59e0b', '#3b82f6', '#ec4899', '#10b981', '#8b5cf6', '#ef4444'];
+    const categoryColors = ['#f59e0b', '#3b82f6', '#ec4899', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e', '#84cc16'];
     const categoryPieData = Object.entries(catMap)
-      .filter(([_, val]) => val > 0)
+      .filter(([name, val]) => val > 0 || name !== 'Uncategorized') // Keep all real categories even if 0
       .map(([name, value], i) => ({ name, value, color: categoryColors[i % categoryColors.length] }));
 
     // Customer Loyalty & Leaderboard
