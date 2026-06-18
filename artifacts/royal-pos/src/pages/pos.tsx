@@ -419,7 +419,8 @@ export default function POS() {
                     const maxAvailable = getMaxAvailability(item);
                     const isTracked = maxAvailable !== Infinity;
                     const isOut = isTracked && maxAvailable === 0;
-                    const isLow = isTracked && maxAvailable <= 5;
+                    const showStockLevel = item.trackStock && !isOut && isTracked;
+                    const isLow = showStockLevel && maxAvailable <= 5;
                     
                     return (
                     <button
@@ -436,7 +437,7 @@ export default function POS() {
                         <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-200 leading-tight line-clamp-2 mb-1">{item.name}</p>
                         <div className="flex items-center justify-between mt-auto">
                           <p className="text-green-600 dark:text-green-400 font-bold text-sm">{formatCurrency(item.price)}</p>
-                          {isTracked && (
+                          {(isOut || showStockLevel) && (
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOut ? 'bg-red-100 text-red-600' : isLow ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
                               {isOut ? 'Out of Stock' : `${maxAvailable} left`}
                             </span>
