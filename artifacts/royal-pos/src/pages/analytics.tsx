@@ -12,8 +12,10 @@ export default function Analytics() {
   const { data: menuItems } = useMenuItems();
   const { data: rawMaterials } = useRawMaterials();
   const { data: customers } = useCustomers();
-  const [timeFilter, setTimeFilter] = useState<'daily'|'weekly'|'monthly'|'all'|'custom'>('all');
+  const [timeFilter, setTimeFilter] = useState<'daily'|'weekly'|'monthly'|'all'|'custom'|'range'>('all');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // Current period orders
   const orders = useMemo(() => {
@@ -24,9 +26,13 @@ export default function Analytics() {
       if(timeFilter === 'weekly') return isThisWeek(d);
       if(timeFilter === 'monthly') return isThisMonth(d);
       if(timeFilter === 'custom') return format(d, 'yyyy-MM-dd') === selectedDate;
+      if(timeFilter === 'range') {
+        const dStr = format(d, 'yyyy-MM-dd');
+        return dStr >= startDate && dStr <= endDate;
+      }
       return true;
     });
-  }, [allOrders, timeFilter, selectedDate]);
+  }, [allOrders, timeFilter, selectedDate, startDate, endDate]);
 
   // Previous period orders for trend comparison
   const previousOrders = useMemo(() => {
@@ -38,9 +44,16 @@ export default function Analytics() {
       if (timeFilter === 'custom') return format(d, 'yyyy-MM-dd') === format(subDays(parseISO(selectedDate), 1), 'yyyy-MM-dd');
       if (timeFilter === 'weekly') return d >= subWeeks(now, 2) && d < subWeeks(now, 1);
       if (timeFilter === 'monthly') return d >= subMonths(now, 2) && d < subMonths(now, 1);
+      if (timeFilter === 'range') {
+        const diff = Math.floor((parseISO(endDate).getTime() - parseISO(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const prevStart = format(subDays(parseISO(startDate), diff), 'yyyy-MM-dd');
+        const prevEnd = format(subDays(parseISO(endDate), diff), 'yyyy-MM-dd');
+        const dStr = format(d, 'yyyy-MM-dd');
+        return dStr >= prevStart && dStr <= prevEnd;
+      }
       return false;
     });
-  }, [allOrders, timeFilter, selectedDate]);
+  }, [allOrders, timeFilter, selectedDate, startDate, endDate]);
 
   const stats = useMemo(() => {
     // Current stats
@@ -58,9 +71,14 @@ export default function Analytics() {
     const itemsMap: Record<string, {name: string, qty: number, revenue: number}> = {};
     orders.forEach(o => {
       o.items.forEach(i => {
-        if (!itemsMap[i.name]) itemsMap[i.name] = { name: i.name, qty: 0, revenue: 0 };
-        itemsMap[i.name].qty += i.quantity;
-        itemsMap[i.name].revenue += i.amount;
+        const itemDef = menuItems.find(mi => mi.name === i.name);
+        const catDef = itemDef ? categories.find(c => c.id === itemDef.categoryId) : null;
+        const isColdDrink = catDef?.name?.toLowerCase().includes('cold drink') || i.name.toLowerCase().includes('colddrink') || i.name.toLowerCase().includes('cold drink');
+        if (!isColdDrink) {
+          if (!itemsMap[i.name]) itemsMap[i.name] = { name: i.name, qty: 0, revenue: 0 };
+          itemsMap[i.name].qty += i.quantity;
+          itemsMap[i.name].revenue += i.amount;
+        }
       });
     });
     const topItems = Object.values(itemsMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
@@ -99,9 +117,15 @@ export default function Analytics() {
     
     // Category Pie Data
     const categoryColors = ['#f59e0b', '#3b82f6', '#ec4899', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6', '#f43f5e', '#84cc16'];
+    const totalCategoryRevenue = Object.values(catMap).reduce((a, b) => a + b, 0);
     const categoryPieData = Object.entries(catMap)
       .filter(([name, val]) => val > 0 || name !== 'Uncategorized') // Keep all real categories even if 0
-      .map(([name, value], i) => ({ name, value, color: categoryColors[i % categoryColors.length] }));
+      .map(([name, value], i) => ({ 
+        name, 
+        value, 
+        percentage: totalCategoryRevenue === 0 ? "0.0" : ((value / totalCategoryRevenue) * 100).toFixed(1),
+        color: categoryColors[i % categoryColors.length] 
+      }));
 
     // Customer Loyalty & Leaderboard
     const customerOrders: Record<string, { count: number, spend: number, name: string }> = {};
@@ -213,6 +237,7 @@ export default function Analytics() {
               >
                 <option value="daily">Today</option>
                 <option value="custom">Specific Day</option>
+                <option value="range">Date Range</option>
                 <option value="weekly">This Week</option>
                 <option value="monthly">This Month</option>
                 <option value="all">All Time</option>
@@ -225,6 +250,23 @@ export default function Analytics() {
                   onChange={e => setSelectedDate(e.target.value)}
                   className="px-4 py-2.5 bg-white dark:bg-card border border-border rounded-xl shadow-sm focus:outline-none focus:ring-4 focus:ring-accent/20 font-bold text-sm text-foreground"
                 />
+              )}
+              {timeFilter === 'range' && (
+                <div className="flex items-center gap-2 bg-white dark:bg-card border border-border rounded-xl shadow-sm px-2">
+                  <input 
+                    type="date"
+                    value={startDate}
+                    onChange={e => setStartDate(e.target.value)}
+                    className="px-2 py-2.5 bg-transparent focus:outline-none font-bold text-sm text-foreground w-[130px]"
+                  />
+                  <span className="text-muted-foreground text-sm font-bold">to</span>
+                  <input 
+                    type="date"
+                    value={endDate}
+                    onChange={e => setEndDate(e.target.value)}
+                    className="px-2 py-2.5 bg-transparent focus:outline-none font-bold text-sm text-foreground w-[130px]"
+                  />
+                </div>
               )}
             </div>
             <button onClick={exportCSV} className="px-5 py-2.5 bg-white dark:bg-card text-foreground border border-border rounded-xl font-bold text-sm hover:shadow-md transition-all">Export CSV</button>
@@ -339,8 +381,8 @@ export default function Analytics() {
                     <Pie data={stats.categoryPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
                       {stats.categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                     </Pie>
-                    <RechartsTooltip formatter={(val: number) => formatCurrency(val)} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                    <Legend iconType="circle" wrapperStyle={{paddingTop:'20px'}} />
+                    <RechartsTooltip formatter={(val: number, name: string, props: any) => [`${formatCurrency(val)} (${props.payload.percentage}%)`, name]} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                    <Legend iconType="circle" wrapperStyle={{paddingTop:'20px'}} formatter={(value, entry: any) => `${value} (${entry.payload.percentage}%)`} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
