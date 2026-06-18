@@ -163,6 +163,27 @@ export default function Analytics() {
     const lowStockMaterials = rawMaterials.filter(m => (m.stock || 0) <= 10).map(m => ({ name: m.name, stock: m.stock || 0, type: 'Material' }));
     const lowStockAlerts = [...lowStockItems, ...lowStockMaterials].sort((a, b) => a.stock - b.stock);
 
+    // Raw Material Consumption
+    const consumptionMap: Record<string, { name: string; unit: string; consumed: number; currentStock: number }> = {};
+    orders.forEach(o => {
+      o.items.forEach(orderItem => {
+        const itemDef = menuItems.find(mi => mi.id === orderItem.id || mi.name === orderItem.name);
+        if (!itemDef || !itemDef.recipe || itemDef.recipe.length === 0) return;
+        itemDef.recipe.forEach(req => {
+          if (!req.materialId || req.quantity <= 0) return;
+          const mat = rawMaterials.find(m => m.id === req.materialId);
+          if (!mat) return;
+          if (!consumptionMap[mat.id]) {
+            consumptionMap[mat.id] = { name: mat.name, unit: mat.unit, consumed: 0, currentStock: mat.stock || 0 };
+          }
+          consumptionMap[mat.id].consumed += req.quantity * orderItem.quantity;
+        });
+      });
+    });
+    const topConsumedMaterials = Object.values(consumptionMap)
+      .filter(m => m.consumed > 0)
+      .sort((a, b) => b.consumed - a.consumed);
+
     return {
       totalOrders: orders.length,
       totalRevenue,
@@ -177,12 +198,13 @@ export default function Analytics() {
       topCustomersList,
       trendDataList,
       lowStockAlerts,
+      topConsumedMaterials,
       repeatCustomers,
       repeatRate,
       cashRevenue: orders.filter(o => o.paymentMethod === 'Cash').reduce((sum, o) => sum + o.total, 0),
       onlineRevenue: orders.filter(o => o.paymentMethod === 'Online').reduce((sum, o) => sum + o.total, 0),
     };
-  }, [orders, previousOrders, allOrders]);
+  }, [orders, previousOrders, allOrders, menuItems, rawMaterials, categories, timeFilter]);
 
   const pieData = [
     { name: 'Cash', value: stats.cashRevenue, color: '#f97316' },
@@ -525,6 +547,59 @@ export default function Analytics() {
                   </div>
                   <p className="font-bold">All Good!</p>
                   <p className="text-sm">Stock levels are healthy.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Raw Material Consumption */}
+          <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-teal-50 rounded-lg text-teal-600"><Package className="w-5 h-5" /></div>
+              <div>
+                <h3 className="font-display font-bold text-lg text-foreground">Material Consumption</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Used in this period</p>
+              </div>
+            </div>
+            <div className="space-y-4 flex-1 overflow-y-auto max-h-[400px] scrollbar-thin pr-1">
+              {stats.topConsumedMaterials.length > 0 ? stats.topConsumedMaterials.map((mat, idx) => {
+                const maxConsumed = stats.topConsumedMaterials[0].consumed;
+                const percentage = maxConsumed > 0 ? (mat.consumed / maxConsumed) * 100 : 0;
+                const isLow = mat.currentStock <= 10;
+                return (
+                  <div key={idx} className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-end">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-muted-foreground w-4">{idx + 1}.</span>
+                        <span className="text-sm font-bold text-foreground">{mat.name}</span>
+                      </div>
+                      <div className="text-right flex items-center gap-2">
+                        <span className="text-xs font-black text-teal-600">{mat.consumed} {mat.unit}</span>
+                        {isLow && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-600">Low</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percentage}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className="h-full bg-teal-500 rounded-full"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {mat.currentStock} {mat.unit} remaining in stock
+                    </p>
+                  </div>
+                );
+              }) : (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-8">
+                  <div className="w-12 h-12 bg-teal-50 text-teal-400 rounded-full flex items-center justify-center mb-3">
+                    <Package className="w-6 h-6" />
+                  </div>
+                  <p className="font-bold">No Consumption Data</p>
+                  <p className="text-sm text-center">Assign recipes to menu items to track raw material usage.</p>
                 </div>
               )}
             </div>
