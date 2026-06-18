@@ -1,14 +1,17 @@
 import { useState, useMemo } from "react";
-import { useOrders, useCategories } from "@/hooks/use-data";
+import { useOrders, useCategories, useMenuItems, useRawMaterials, useCustomers } from "@/hooks/use-data";
 import { formatCurrency } from "@/lib/utils";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, AreaChart, Area } from "recharts";
 import { format, isToday, isThisWeek, isThisMonth, parseISO, subDays, subWeeks, subMonths, isSameDay } from "date-fns";
-import { TrendingUp, CreditCard, Banknote, Users, AlertTriangle, Clock, Award, Star, ArrowUpRight, ArrowDownRight, Trash2 } from "lucide-react";
+import { TrendingUp, CreditCard, Banknote, Users, AlertTriangle, Clock, Award, Star, ArrowUpRight, ArrowDownRight, Trash2, Tag, Percent, Package } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Analytics() {
   const { data: allOrders, deleteOrder, resetData } = useOrders();
   const { data: categories } = useCategories();
+  const { data: menuItems } = useMenuItems();
+  const { data: rawMaterials } = useRawMaterials();
+  const { data: customers } = useCustomers();
   const [timeFilter, setTimeFilter] = useState<'daily'|'weekly'|'monthly'|'all'|'custom'>('all');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
@@ -42,6 +45,7 @@ export default function Analytics() {
   const stats = useMemo(() => {
     // Current stats
     const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+    const totalDiscounts = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0);
     const uniqueCustomers = new Set(orders.map(o => o.customerPhone || o.customerName)).size;
     
     // Previous stats for trends
@@ -82,31 +86,70 @@ export default function Analytics() {
     const catMap: Record<string, number> = {};
     orders.forEach(o => {
       o.items.forEach(i => {
-        // Find category name (mock for now or join if available)
-        // Since we don't have catId in OrderItem, we'll use a simple fallback
-        // In a real app we'd join with menuItems
-        catMap['Food'] = (catMap['Food'] || 0) + i.amount;
+        // Find category using menuItems
+        const itemDef = menuItems.find(mi => mi.name === i.name);
+        const catDef = itemDef ? categories.find(c => c.id === itemDef.categoryId) : null;
+        const catName = catDef ? catDef.name : 'Uncategorized';
+        catMap[catName] = (catMap[catName] || 0) + i.amount;
       });
     });
+    
+    // Category Pie Data
+    const categoryColors = ['#f59e0b', '#3b82f6', '#ec4899', '#10b981', '#8b5cf6', '#ef4444'];
+    const categoryPieData = Object.entries(catMap)
+      .filter(([_, val]) => val > 0)
+      .map(([name, value], i) => ({ name, value, color: categoryColors[i % categoryColors.length] }));
 
-    // Customer Loyalty
-    const customerOrders: Record<string, number> = {};
+    // Customer Loyalty & Leaderboard
+    const customerOrders: Record<string, { count: number, spend: number, name: string }> = {};
     allOrders.forEach(o => {
       const key = o.customerPhone || o.customerName;
-      if (key) customerOrders[key] = (customerOrders[key] || 0) + 1;
+      if (key) {
+        if (!customerOrders[key]) customerOrders[key] = { count: 0, spend: 0, name: o.customerName || "Unknown" };
+        customerOrders[key].count += 1;
+        customerOrders[key].spend += o.total;
+      }
     });
-    const repeatCustomers = Object.values(customerOrders).filter(count => count > 1).length;
+    const repeatCustomers = Object.values(customerOrders).filter(c => c.count > 1).length;
     const repeatRate = uniqueCustomers === 0 ? 0 : (repeatCustomers / uniqueCustomers) * 100;
+    
+    const topCustomersList = Object.values(customerOrders)
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 5);
+
+    // Trend Data over Time (Line Chart)
+    const trendMap: Record<string, number> = {};
+    orders.forEach(o => {
+      const d = parseISO(o.createdAt);
+      const key = (timeFilter === 'daily' || timeFilter === 'custom') 
+        ? format(d, 'HH:00') // group by hour
+        : format(d, 'MMM dd'); // group by day
+      trendMap[key] = (trendMap[key] || 0) + o.total;
+    });
+    // Sort keys chronologically
+    const trendDataList = Object.entries(trendMap)
+      .sort(([k1], [k2]) => k1.localeCompare(k2))
+      .map(([name, revenue]) => ({ name, revenue }));
+
+    // Low Stock Alerts
+    const lowStockItems = menuItems.filter(i => i.trackStock && (i.stock || 0) <= 5).map(i => ({ name: i.name, stock: i.stock || 0, type: 'Item' }));
+    const lowStockMaterials = rawMaterials.filter(m => (m.stock || 0) <= 10).map(m => ({ name: m.name, stock: m.stock || 0, type: 'Material' }));
+    const lowStockAlerts = [...lowStockItems, ...lowStockMaterials].sort((a, b) => a.stock - b.stock);
 
     return {
       totalOrders: orders.length,
       totalRevenue,
+      totalDiscounts,
       avgOrderValue: orders.length ? totalRevenue / orders.length : 0,
       uniqueCustomers,
       revenueTrend,
       ordersTrend,
       topItems,
       hourlyData,
+      categoryPieData,
+      topCustomersList,
+      trendDataList,
+      lowStockAlerts,
       repeatCustomers,
       repeatRate,
       cashRevenue: orders.filter(o => o.paymentMethod === 'Cash').reduce((sum, o) => sum + o.total, 0),
@@ -188,7 +231,7 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
           <StatCard 
             title="Total Revenue" 
             value={formatCurrency(stats.totalRevenue)} 
@@ -210,12 +253,50 @@ export default function Analytics() {
             color="bg-purple-50" 
           />
           <StatCard 
+            title="Total Discounts" 
+            value={formatCurrency(stats.totalDiscounts)} 
+            icon={<Percent className="text-red-500 w-6 h-6" />} 
+            color="bg-red-50" 
+          />
+          <StatCard 
             title="Repeat Customers" 
             value={stats.repeatCustomers} 
             icon={<Users className="text-yellow-500 w-6 h-6" />} 
             color="bg-yellow-50" 
             subtitle={`${stats.repeatRate.toFixed(1)}% loyalty rate`}
           />
+        </div>
+
+        {/* Sales Trend Chart */}
+        <div className="bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><TrendingUp className="w-5 h-5" /></div>
+            <h3 className="font-display font-bold text-lg text-foreground">Sales Trend</h3>
+          </div>
+          <div className="w-full h-[300px]">
+            {stats.trendDataList.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stats.trendDataList} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `₹${val}`} />
+                  <RechartsTooltip 
+                    formatter={(val: number) => [formatCurrency(val), 'Revenue']}
+                    contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-muted-foreground italic">No trend data available</div>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -242,7 +323,31 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Top Selling Items */}
+          {/* Revenue by Category Chart */}
+          <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-pink-50 rounded-lg text-pink-600"><Tag className="w-5 h-5" /></div>
+              <h3 className="font-display font-bold text-lg text-foreground">Revenue by Category</h3>
+            </div>
+            <div className="flex-1 min-h-[300px] relative">
+              {stats.categoryPieData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={stats.categoryPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
+                      {stats.categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                    </Pie>
+                    <RechartsTooltip formatter={(val: number) => formatCurrency(val)} contentStyle={{borderRadius:'12px', border:'none', boxShadow:'0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                    <Legend iconType="circle" wrapperStyle={{paddingTop:'20px'}} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground font-medium">No category data</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-yellow-50 rounded-lg text-yellow-600"><Star className="w-5 h-5" /></div>
@@ -285,7 +390,33 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Payment Methods Chart */}
+          {/* Top Customers */}
+          <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><Users className="w-5 h-5" /></div>
+              <h3 className="font-display font-bold text-lg text-foreground">Top Customers</h3>
+            </div>
+            <div className="space-y-4 flex-1">
+              {stats.topCustomersList.length > 0 ? stats.topCustomersList.map((c, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 rounded-xl border border-border/50 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black text-xs">
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.count} orders</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-sm text-primary">{formatCurrency(c.spend)}</p>
+                  </div>
+                </div>
+              )) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground italic">No customer data yet</div>
+              )}
+            </div>
+          </div>
           <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-purple-50 rounded-lg text-purple-600"><CreditCard className="w-5 h-5" /></div>
@@ -315,6 +446,42 @@ export default function Analytics() {
                 <p className="text-xs font-bold text-yellow-600 uppercase tracking-wider mb-1">Online</p>
                 <p className="text-xl font-black text-yellow-700 dark:text-yellow-400">{formatCurrency(stats.onlineRevenue)}</p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Low Stock Alerts */}
+          <div className="lg:col-span-1 bg-white dark:bg-card rounded-3xl p-6 shadow-xl shadow-black/5 border border-border/50 flex flex-col">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-red-50 rounded-lg text-red-600"><AlertTriangle className="w-5 h-5" /></div>
+              <h3 className="font-display font-bold text-lg text-foreground">Stock Alerts</h3>
+            </div>
+            <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] scrollbar-thin pr-2">
+              {stats.lowStockAlerts.length > 0 ? stats.lowStockAlerts.map((item, idx) => (
+                <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${item.stock === 0 ? 'bg-red-50/50 border-red-100' : 'bg-orange-50/30 border-orange-100'}`}>
+                  <div className="flex items-center gap-3">
+                    {item.type === 'Item' ? <Tag className={`w-4 h-4 ${item.stock===0?'text-red-500':'text-orange-500'}`} /> : <Package className={`w-4 h-4 ${item.stock===0?'text-red-500':'text-orange-500'}`} />}
+                    <div>
+                      <p className="text-sm font-bold text-foreground">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.type}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-[10px] px-2 py-1 rounded-lg font-bold uppercase tracking-wider ${item.stock===0?'bg-red-100 text-red-700':'bg-orange-100 text-orange-700'}`}>
+                      {item.stock === 0 ? 'Out' : `${item.stock} left`}
+                    </span>
+                  </div>
+                </div>
+              )) : (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-8">
+                  <div className="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-3">
+                    <Star className="w-6 h-6" />
+                  </div>
+                  <p className="font-bold">All Good!</p>
+                  <p className="text-sm">Stock levels are healthy.</p>
+                </div>
+              )}
             </div>
           </div>
 
