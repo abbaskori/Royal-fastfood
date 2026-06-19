@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "build": "npm run typecheck && npm run build --workspaces --if-present",
+    "build": "npm run vercel-build",
     "typecheck:libs": "tsc --build",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspaces --if-present",
     "vercel-build": "npm run build -w @workspace/royal-pos && node -e \"require('fs').cpSync('artifacts/royal-pos/dist', 'dist', {recursive: true})\""

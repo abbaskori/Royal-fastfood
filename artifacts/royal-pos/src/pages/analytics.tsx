@@ -329,12 +329,12 @@ export default function Analytics() {
             color="bg-red-50" 
           />
           <StatCard 
-            title="Repeat Customers" 
-            value={stats.repeatCustomers} 
-            icon={<Users className="text-yellow-500 w-6 h-6" />} 
-            color="bg-yellow-50" 
-            subtitle={`${stats.repeatRate.toFixed(1)}% loyalty rate`}
+            title="Materials Consumed" 
+            value={totalConsumedDisplay} 
+            icon={<Package className="text-teal-500 w-6 h-6" />} 
+            color="bg-teal-50" 
           />
+
         </div>
 
         {/* Sales Trend Chart */}
