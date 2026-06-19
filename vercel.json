@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "outputDirectory": "artifacts/royal-pos/dist",
+
   "builds": [
     {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "artifacts/royal-pos/dist"
+        "distDir": "dist"
       }
     }
   ],
