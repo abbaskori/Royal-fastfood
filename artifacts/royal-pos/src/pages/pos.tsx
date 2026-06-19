@@ -715,6 +715,65 @@ function printBill(order: any, shop: any, logoSrc: string) {
   });
 }
 
+// ─── KOT Print helper ────────────────────────────────────────────────────────
+
+function printKOT(order: any, shop: any, logoSrc: string) {
+  const itemRows = order.items.map((i: any) => `
+    <tr>
+      <td style="padding:6px 2px;border-bottom:1px dashed #000;font-size:14px;font-weight:bold;">${i.name}</td>
+      <td style="padding:6px 2px;text-align:center;border-bottom:1px dashed #000;font-size:16px;font-weight:bold;">${i.quantity}</td>
+    </tr>`).join("");
+
+  const html = `<!DOCTYPE html><html><head>
+    <meta charset="utf-8"/>
+    <title>KOT</title>
+    <style>
+      @page { size: 80mm auto; margin: 4mm; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; background: #fff; width: 100%; }
+      .center { text-align: center; }
+      .bold { font-weight: bold; }
+      hr { border: none; border-top: 2px dashed #000; margin: 6px 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th { text-align: left; padding: 4px 2px; border-bottom: 2px solid #000; font-size: 12px; text-transform: uppercase; }
+      th:nth-child(2) { text-align: center; }
+    </style>
+  </head><body>
+    <div class="center" style="padding:4px 0;">
+      <div style="font-size:18px;font-weight:900;letter-spacing:2px;border:2px solid #000;padding:6px 0;margin-bottom:4px;">🍳 KOT</div>
+      <div style="font-size:10px;color:#333;">${shop.name}</div>
+    </div>
+    <hr/>
+    <div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;">
+      <span>Date: ${format(new Date(order.createdAt), "dd/MM/yy")}</span>
+      <span>Time: ${format(new Date(order.createdAt), "hh:mm a")}</span>
+    </div>
+    ${order.customerPhone ? `<div style="font-size:11px;padding:2px 0;">Phone: ${order.customerPhone}</div>` : ""}
+    <hr/>
+    <table>
+      <thead><tr>
+        <th>Item</th>
+        <th style="text-align:center;width:60px;">Qty</th>
+      </tr></thead>
+      <tbody>${itemRows}</tbody>
+    </table>
+    <hr/>
+    <div class="center" style="font-size:11px;padding:4px 0;">
+      <div class="bold">Total Items: ${order.items.reduce((sum: number, i: any) => sum + i.quantity, 0)}</div>
+    </div>
+    <hr/>
+    <div class="center" style="font-size:10px;padding:4px 0;color:#555;">— End of KOT —</div>
+  </body></html>`;
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "width=420,height=500");
+  if (!win) { URL.revokeObjectURL(url); alert("Pop-up blocked! Please allow pop-ups for this site to print."); return; }
+  win.addEventListener("load", () => {
+    setTimeout(() => { win.print(); win.close(); URL.revokeObjectURL(url); }, 300);
+  });
+}
+
 // ─── Receipt View ─────────────────────────────────────────────────────────────
 
 function ReceiptView({ order, shop, logoSrc, onBack, onNewBill }: {
@@ -736,12 +795,18 @@ function ReceiptView({ order, shop, logoSrc, onBack, onNewBill }: {
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 active:scale-95 transition-all text-sm"
-        >
-          🖨️ Print
-        </button>
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 active:scale-95 transition-all text-sm"
+            >
+              🖨️ Print
+            </button>
+            <button
+              onClick={() => printKOT(order, shop, logoSrc)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 active:scale-95 transition-all text-sm"
+            >
+              🗒️ KOT
+            </button>
         <button
           onClick={() => {
             const phone = order.customerPhone;
