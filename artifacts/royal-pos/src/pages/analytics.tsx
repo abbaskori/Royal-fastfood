@@ -206,6 +206,9 @@ export default function Analytics() {
     };
   }, [orders, previousOrders, allOrders, menuItems, rawMaterials, categories, timeFilter]);
 
+  const totalConsumedUnits = stats.topConsumedMaterials.reduce((sum, m) => sum + m.consumed, 0);
+  const totalConsumedDisplay = `${totalConsumedUnits} units`;
+
   const pieData = [
     { name: 'Cash', value: stats.cashRevenue, color: '#f97316' },
     { name: 'Online', value: stats.onlineRevenue, color: '#ec4899' },
@@ -298,7 +301,7 @@ export default function Analytics() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 md:gap-6">
           <StatCard 
             title="Total Revenue" 
             value={formatCurrency(stats.totalRevenue)} 
